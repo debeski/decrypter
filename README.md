@@ -9,6 +9,12 @@ Because the tool runs entirely via Docker, you do not need to repeatedly install
 
 ***
 
+## 📦 Quick Start (Usage)
+To use this orchestrator in another project, **you do not need to clone this entire repository** (unless you want to build and use your own custom image).
+
+Simply grab the `start.sh` (or `start.ps1`) file, drop it into the root directory of your target project, and you're good to go! The script acts as a portable, standalone entrypoint that automatically pulls and interacts with the pre-built Docker environment.
+
+***
 ## 🛠 Compilation (Global Setup)
 If `start.py` receives an update or an improvement, rebuild the image from this directory to bump the generic target for all your projects.
 
