@@ -4,6 +4,9 @@ A fully containerized multi-tool for securely managing SOPS encryption and safel
 
 Because the tool runs entirely via Docker, you do not need to repeatedly install `sops`, `age`, Python, or Docker Compose plugins on your host system.
 
+> [!NOTE]
+> Cross-Platform Usage: The commands in this documentation often show `./start.sh` which is intended for Linux/macOS. For Windows systems, you should simply use the PowerShell equivalent `.\start.ps1` (or `./start.ps1`).
+
 ***
 
 ## 🛠 Compilation (Global Setup)
@@ -90,3 +93,10 @@ export SOPS_AGE_KEY="AGE-SECRET-KEY-..."
 2. It decrypts `secrets.enc` instantly in memory (never written to disk)
 3. It spins up the `db`, `redis`, and your internal services across the host system's docker network.
 4. It conducts health checks and initiates internal database migrations via `--make-migrations` arguments transparently!
+
+***
+
+## 📜 Version History
+
+- **v1.0.1** - Added MIT License, detailed project `.gitignore`, and clarified multi-platform Windows (`.ps1`) usage.
+- **v1.0.0** - Initial release: Core orchestration for SOPS age encryption and Docker deployment setups.
