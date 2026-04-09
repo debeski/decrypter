@@ -28,10 +28,6 @@ imports/
 .xpose/
 .nginx/
 .sops/
-scanner_app/
-micro-archive_ai-pkg/
-sidebar/
-users/
 
 # Ignore celery-related files
 celerybeat-schedule

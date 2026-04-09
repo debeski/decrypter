@@ -81,7 +81,7 @@ If you ever want to update an existing `secrets.enc` file back into `.secrets/.e
 
 Once your `secrets.enc` is ready and your project's `compose.yml` is populated, starting the environment using the native Deploy orchestrator is trivial.
 
-Provide your private key (`SOPS_AGE_KEY`) directly to the shell wrapper. The wrapper perfectly forwards your CLI flags (`-sd`, `-mm`, `-k`) directly to the internal python orchestration script.
+Provide your private key (`SOPS_AGE_KEY`) directly to the shell wrapper. The wrapper perfectly forwards your CLI flags (`-sd`, `-mm`, `-k`, `-u`) directly to the internal python orchestration script.
 
 **Option A: Command-line Flags (Recommended):**
 ```bash
@@ -94,6 +94,19 @@ export SOPS_AGE_KEY="AGE-SECRET-KEY-..."
 ./start.sh -mm
 ```
 
+### 🔄 Image Updates
+If you need to ensure your local images are in sync with the remote registry before starting, you can use the `-u` or `--update` flag. This will trigger a `docker compose pull` before the deployment begins.
+
+- **Check and pull all images defined in compose:**
+  ```bash
+  ./start.sh -u
+  ```
+
+- **Check and pull only a specific service:**
+  ```bash
+  ./start.sh -u web
+  ```
+
 ### What happens under the hood?
 1. The container mounts natively and identically.
 2. It decrypts `secrets.enc` instantly in memory (never written to disk)
@@ -104,6 +117,7 @@ export SOPS_AGE_KEY="AGE-SECRET-KEY-..."
 
 ## 📜 Version History
 
+- **v1.0.3** - Added `-u` / `--update` flag to force pull container images. Support for specific service targeting (e.g., `-u web`).
 - **v1.0.2** - Shifted core target pattern to Docker Compose (`:compose` tag default). Removed container-internal web reachability checks in favor of native health states.
 - **v1.0.1** - Added MIT License, detailed project `.gitignore`, and clarified multi-platform Windows (`.ps1`) usage.
 - **v1.0.0** - Initial release: Core orchestration for SOPS age encryption and Docker deployment setups.

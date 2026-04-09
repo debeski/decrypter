@@ -40,9 +40,12 @@ class DockerComposeLauncher:
         self.skip_decrypt = False
         self.compose_file = None
         self.target_app = None
+        self.update_images = False
+        self.pull_service = None
 
         self.sections = {
             "secrets": IDLE,
+            "pull": IDLE,
             "compose": IDLE,
             "health": IDLE,
             "post_start": IDLE,
@@ -84,6 +87,11 @@ class DockerComposeLauncher:
             }[state]
 
         print(f"{icon(self.sections['secrets'])} Decrypt Secrets")
+        if self.update_images:
+            pull_label = "Pull Images"
+            if isinstance(self.pull_service, str):
+                pull_label += f" ({self.pull_service})"
+            print(f"{icon(self.sections['pull'])} {pull_label}")
         print(f"{icon(self.sections['compose'])} Start Compose")
 
         print(f"{icon(self.sections['health'])} Health Check")
@@ -118,6 +126,7 @@ class DockerComposeLauncher:
         parser.add_argument('-mm', '--make-migrations', action='store_true', help='Force making migrations during post-start tasks')
         parser.add_argument('-a', '--app', help='Target app for initialization (passed to migrator)')
         parser.add_argument('-sd', '--skip-decrypt', action='store_true', help='Bypass decryption and read .secrets/.env directly')
+        parser.add_argument('-u', '--update', nargs='?', const=True, help='Force docker compose pull before starting')
         parser.add_argument('key_positional', nargs='?', help='AGE secret key (positional)')
         
         return parser.parse_args()
@@ -324,6 +333,13 @@ class DockerComposeLauncher:
         ok, _, err = self.run_docker_compose(["up", "-d"])
         return ok, err
 
+    def pull_images(self) -> Tuple[bool, str]:
+        pull_args = ["pull"]
+        if isinstance(self.pull_service, str):
+            pull_args.append(self.pull_service)
+        ok, _, err = self.run_docker_compose(pull_args)
+        return ok, err
+
     def monitor_health(self) -> bool:
         start = time.time()
         timeout = 180
@@ -358,6 +374,10 @@ class DockerComposeLauncher:
             self.skip_decrypt = args.skip_decrypt
             self.compose_file = args.file
             self.target_app = args.app
+            if args.update:
+                self.update_images = True
+                if isinstance(args.update, str):
+                    self.pull_service = args.update
 
             self.extract_config()
 
@@ -389,6 +409,17 @@ class DockerComposeLauncher:
                     self.render("Failed to decrypt secrets")
                     sys.exit(1)
             self.sections["secrets"] = OK
+
+            # Pull (Optional)
+            if self.update_images:
+                self.sections["pull"] = RUNNING
+                self.render()
+                ok, err = self.pull_images()
+                if not ok:
+                    self.sections["pull"] = ERROR
+                    self.render(f"Failed to pull images:\n  {err.strip()}")
+                    sys.exit(1)
+                self.sections["pull"] = OK
 
             # Compose
             self.sections["compose"] = RUNNING
