@@ -107,6 +107,19 @@ If you need to ensure your local images are in sync with the remote registry bef
   ./start.sh -u web
   ```
 
+### 🛑 Stopping Environment
+To stop and remove the running containers, use the `--down` flag:
+
+```bash
+./start.sh --down
+```
+
+To also remove volumes (equivalent to `docker compose down -v`), add the `-v` flag:
+
+```bash
+./start.sh --down -v
+```
+
 ### What happens under the hood?
 1. The container mounts natively and identically.
 2. It decrypts `secrets.enc` instantly in memory (never written to disk)
@@ -117,6 +130,7 @@ If you need to ensure your local images are in sync with the remote registry bef
 
 ## 📜 Version History
 
+- **v1.0.4** - Added `--down` flag to stop containers and `-v` flag to remove volumes when stopping.
 - **v1.0.3** - Added `-u` / `--update` flag to force pull container images. Support for specific service targeting (e.g., `-u web`).
 - **v1.0.2** - Shifted core target pattern to Docker Compose (`:compose` tag default). Removed container-internal web reachability checks in favor of native health states.
 - **v1.0.1** - Added MIT License, detailed project `.gitignore`, and clarified multi-platform Windows (`.ps1`) usage.

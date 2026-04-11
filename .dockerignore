@@ -4,9 +4,8 @@
 __pycache__/
 *.DS_Store
 desktop.ini
-desktop.inf
 autorun.ini
-autorun.inf
+.codex
 
 # Ignore Docker-related files
 Dockerfile
@@ -23,11 +22,23 @@ logs/
 media/
 staticfiles/
 imports/
+backups/
 .backups/
+secrets/
 .secrets/
+venv/
+.venv/
+dist/
+.dist/
+*.egg-info/
+build/
+.build/
+codex/
+.codex/
+agents/
+.agents/
 .xpose/
-.nginx/
-.sops/
+
 
 # Ignore celery-related files
 celerybeat-schedule
@@ -38,5 +49,5 @@ celerybeat-schedule-wal
 .env
 .key
 secrets.enc
-start.ps1
 start.sh
+tracker.md

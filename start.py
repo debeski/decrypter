@@ -7,7 +7,7 @@ import time
 import json
 import re
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 import argparse
 
 # ─────────────────────────────────────────────
@@ -42,6 +42,8 @@ class DockerComposeLauncher:
         self.target_app = None
         self.update_images = False
         self.pull_service = None
+        self.down_mode = False
+        self.down_volumes = False
 
         self.sections = {
             "secrets": IDLE,
@@ -127,11 +129,13 @@ class DockerComposeLauncher:
         parser.add_argument('-a', '--app', help='Target app for initialization (passed to migrator)')
         parser.add_argument('-sd', '--skip-decrypt', action='store_true', help='Bypass decryption and read .secrets/.env directly')
         parser.add_argument('-u', '--update', nargs='?', const=True, help='Force docker compose pull before starting')
+        parser.add_argument('--down', action='store_true', help='Run docker compose down instead of up')
+        parser.add_argument('-v', '--volumes', action='store_true', help='Remove volumes when using --down')
         parser.add_argument('key_positional', nargs='?', help='AGE secret key (positional)')
         
         return parser.parse_args()
 
-    def run_command(self, cmd: List[str], timeout=60) -> Tuple[bool, str, str]:
+    def run_command(self, cmd: List[str], timeout: Optional[float] = None) -> Tuple[bool, str, str]:
         try:
             result = subprocess.run(
                 cmd,
@@ -141,18 +145,20 @@ class DockerComposeLauncher:
                 shell=sys.platform == "win32"
             )
             return result.returncode == 0, result.stdout, result.stderr
+        except subprocess.TimeoutExpired as e:
+            return False, e.stdout or "", f"Command timed out after {timeout} seconds"
         except Exception as e:
             return False, "", str(e)
 
-    def run_docker_compose(self, args: List[str]) -> Tuple[bool, str, str]:
+    def run_docker_compose(self, args: List[str], timeout: Optional[float] = None) -> Tuple[bool, str, str]:
         base_args = []
         if self.compose_file:
             base_args.extend(["-f", self.compose_file])
             
-        success, out, err = self.run_command(["docker", "compose"] + base_args + args)
+        success, out, err = self.run_command(["docker", "compose"] + base_args + args, timeout=timeout)
         if success or "is not a docker command" not in err.lower():
             return success, out, err
-        return self.run_command(["docker-compose"] + base_args + args)
+        return self.run_command(["docker-compose"] + base_args + args, timeout=timeout)
 
     # ─────────────────────────────────────────
     # Steps
@@ -293,7 +299,7 @@ class DockerComposeLauncher:
             return False
 
     def discover_services(self) -> bool:
-        ok, out, _ = self.run_docker_compose(["config", "--services"])
+        ok, out, _ = self.run_docker_compose(["config", "--services"], timeout=10)
         if not ok:
             return False
         self.services = [s for s in out.splitlines() if s]
@@ -301,7 +307,7 @@ class DockerComposeLauncher:
         return True
 
     def update_service_states(self) -> bool:
-        ok, out, _ = self.run_docker_compose(["ps", "--format", "json"])
+        ok, out, _ = self.run_docker_compose(["ps", "--format", "json"], timeout=10)
         if not ok:
             return False
 
@@ -333,6 +339,13 @@ class DockerComposeLauncher:
         ok, _, err = self.run_docker_compose(["up", "-d"])
         return ok, err
 
+    def down_containers(self) -> Tuple[bool, str]:
+        down_args = ["down"]
+        if self.down_volumes:
+            down_args.append("-v")
+        ok, _, err = self.run_docker_compose(down_args)
+        return ok, err
+
     def pull_images(self) -> Tuple[bool, str]:
         pull_args = ["pull"]
         if isinstance(self.pull_service, str):
@@ -341,12 +354,18 @@ class DockerComposeLauncher:
         return ok, err
 
     def monitor_health(self) -> bool:
-        start = time.time()
         timeout = 180
+        deadline = time.time() + timeout
+        last_snapshot: Optional[Tuple[str, ...]] = None
 
-        while time.time() - start < timeout:
+        while time.time() < deadline:
             if not self.update_service_states():
                 return False
+
+            snapshot = tuple(self.service_state.get(s, SERVICE_NOT_SEEN) for s in self.services)
+            if snapshot != last_snapshot:
+                deadline = time.time() + timeout
+                last_snapshot = snapshot
 
             print("\r   " + " ".join(self.service_icon(s) for s in self.services), end="", flush=True)
 
@@ -378,6 +397,8 @@ class DockerComposeLauncher:
                 self.update_images = True
                 if isinstance(args.update, str):
                     self.pull_service = args.update
+            self.down_mode = args.down
+            self.down_volumes = args.volumes
 
             self.extract_config()
 
@@ -385,6 +406,18 @@ class DockerComposeLauncher:
             if not self.discover_services():
                 self.render("Failed to read compose services")
                 sys.exit(1)
+
+            # Handle down mode early (no secrets needed, no health checks, etc.)
+            if self.down_mode:
+                print("🛑 Stopping and removing containers...")
+                if self.down_volumes:
+                    print("   (Volumes will be removed)")
+                ok, err = self.down_containers()
+                if not ok:
+                    print(f"✖ Failed to stop containers:\n  {err.strip()}")
+                    sys.exit(1)
+                print("✅ Containers stopped")
+                return
 
             # Get initial state
             self.update_service_states()
