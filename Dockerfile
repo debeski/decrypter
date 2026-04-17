@@ -27,6 +27,7 @@ RUN ARCH=$(dpkg --print-architecture) && \
     chmod +x /usr/local/bin/sops
 
 COPY start.py /app/start.py
+COPY VERSION /app/VERSION
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/start.py /app/entrypoint.sh
 

@@ -7,6 +7,7 @@ import time
 import json
 import re
 import shlex
+import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import argparse
@@ -57,6 +58,18 @@ PROGRESS_KEYWORDS = (
     "transferring",
 )
 
+VERSION_FILE_NAME = "VERSION"
+DEFAULT_DECRYPTER_VERSION = "0.0.0"
+
+
+def read_decrypter_version() -> str:
+    version_path = Path(__file__).resolve().with_name(VERSION_FILE_NAME)
+    try:
+        version = version_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return DEFAULT_DECRYPTER_VERSION
+    return version or DEFAULT_DECRYPTER_VERSION
+
 
 # ─────────────────────────────────────────────
 # Launcher
@@ -65,6 +78,7 @@ PROGRESS_KEYWORDS = (
 class DockerComposeLauncher:
     def __init__(self):
         self.app_url = "http://localhost"
+        self.decrypter_version = read_decrypter_version()
         self.enc_file = "./secrets.enc"
         self.loaded_secrets: List[str] = []
         self.debug_mode = False
@@ -82,6 +96,7 @@ class DockerComposeLauncher:
         self.last_progress_message = ""
         self.last_runtime_diagnostic = ""
         self.last_render_line_count = 0
+        self.compose_runtime_override: Optional[Path] = None
 
         self.sections = {
             "secrets": IDLE,
@@ -302,6 +317,8 @@ class DockerComposeLauncher:
         elif self.dev_mode:
             # In dev mode, use both compose.yml and compose.dev.yml
             base_args.extend(["-f", "compose.yml", "-f", "compose.dev.yml"])
+        if self.compose_runtime_override and self.compose_runtime_override.exists():
+            base_args.extend(["-f", str(self.compose_runtime_override)])
         return base_args
 
     def build_compose_env(self) -> Dict[str, str]:
@@ -309,6 +326,7 @@ class DockerComposeLauncher:
         if self.dev_mode and not self.compose_file:
             # compose.yml expects this substitution in dev mode
             env["NGINX_PORT"] = "81"
+        env["DECRYPTER_VERSION"] = self.decrypter_version
         env.setdefault("BUILDKIT_PROGRESS", "plain")
         return env
 
@@ -493,6 +511,49 @@ class DockerComposeLauncher:
 
         return "\n\n".join(section for section in sections if section.strip())
 
+    def sync_runtime_compose_override(self) -> bool:
+        if not self.services:
+            self.remove_runtime_compose_override()
+            return True
+
+        if self.compose_runtime_override is None:
+            fd, path = tempfile.mkstemp(
+                prefix=".decrypter-runtime-",
+                suffix=".compose.yml",
+                dir=os.getcwd(),
+            )
+            os.close(fd)
+            self.compose_runtime_override = Path(path)
+
+        lines = ["services:"]
+        for service in self.services:
+            lines.extend(
+                [
+                    f"  {service}:",
+                    "    environment:",
+                    f"      DECRYPTER_VERSION: {json.dumps(self.decrypter_version)}",
+                ]
+            )
+
+        try:
+            self.compose_runtime_override.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        except Exception as exc:
+            self.last_runtime_diagnostic = (
+                f"Failed to write Decrypter runtime override: {exc}"
+            )
+            return False
+
+        return True
+
+    def remove_runtime_compose_override(self):
+        if not self.compose_runtime_override:
+            return
+        try:
+            self.compose_runtime_override.unlink(missing_ok=True)
+        except Exception:
+            pass
+        self.compose_runtime_override = None
+
     # ─────────────────────────────────────────
     # Steps
     # ─────────────────────────────────────────
@@ -641,6 +702,8 @@ class DockerComposeLauncher:
             return False
         self.services = [s for s in out.splitlines() if s]
         self.service_state = {s: SERVICE_NOT_SEEN for s in self.services}
+        if not self.sync_runtime_compose_override():
+            return False
         self.last_runtime_diagnostic = ""
         return True
 
@@ -744,6 +807,7 @@ class DockerComposeLauncher:
         for k in self.loaded_secrets:
             os.environ.pop(k, None)
         os.environ.pop("SOPS_AGE_KEY", None)
+        self.remove_runtime_compose_override()
 
     def handle_interrupt(self):
         if self.last_render_line_count or self.last_progress_message:

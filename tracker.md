@@ -8,6 +8,7 @@
 - `entrypoint.sh` routes commands: special commands (keygen, encrypt, decrypt, sops) or passes through to Python orchestrator
 - Core Python orchestrator at `start.py` handles docker compose operations with health checks and post-start hooks
 - `start.py` now streams compose build/pull progress, gathers richer compose/post-start diagnostics, and tolerates initial service discovery failure until secrets are loaded
+- `start.py` reads the launcher version from a bundled `VERSION` file, exports it into the Compose process environment, and generates a temporary compose override that injects the same value into every launched service
 - Compose/pull progress must update in place on a single terminal line so the fixed Render UI does not scroll away
 - Main UI redraws must update the existing rendered block in place; full-screen clear/repaint causes repeated banner output in some terminals
 - Verified repaint bug cause: the main renderer was moving the cursor up by the full prior line count instead of `line_count - 1`, which left the top of prior frames behind
@@ -24,6 +25,8 @@
 - Render-based UI with section states (idle, running, ok, error)
 - Service health monitoring via docker compose ps --format json
 - Services without a healthcheck should be treated as ready once Docker reports them as running
+- Launcher-owned runtime metadata should be injected centrally in `start.py` rather than requiring per-project compose edits when the value is global to every deployment
+- Version source of truth is the repo/image `VERSION` file, not a hardcoded constant inside `start.py`
 - Streaming status output must reuse one dynamic line via carriage return and line erase instead of printing new lines
 - UI refreshes should use cursor-up plus line erase over the existing block rather than screen clears
 
@@ -52,24 +55,29 @@
   - [x] Improve compose failure output using captured command output plus `docker compose ps/logs` diagnostics when available
   - [x] Treat running services with no healthcheck as ready during health monitoring
   - [x] Make early service discovery non-fatal when compose config still depends on decrypted secrets
+  - [x] Pass the current Decrypter version into Compose and every launched service without requiring deployed projects to add a new env entry
+  - [x] Load the injected Decrypter version from `VERSION` so the image and runtime env share one source of truth
   - [ ] Manually verify startup against a compose project with a service `build:` step
+  - [ ] Manually verify a launched container can read `DECRYPTER_VERSION`
   - [ ] Manually verify failure output for a container that exits with code 1 and for a failing `post_start` command
 
 - Completed Recently:
   - [x] Added docker compose down functionality with optional volume removal
   - [x] Added compose progress streaming and richer diagnostics in `start.py`
+  - [x] Added automatic runtime version injection via generated compose override
 
 ### Tests:
 - Verified: `python -m compileall start.py`
 - Recommended: manual Ctrl+C during compose startup to confirm the launcher exits with only the clean interrupt message
 - Recommended: manual run of `./start.sh` against a compose file that triggers image build output during `docker compose up -d`
+- Recommended: manual run of `./start.sh` followed by `docker compose exec <service> env | grep DECRYPTER_VERSION`
 - Recommended: manual run of `./start.sh` with a service that has no healthcheck and should be accepted once running
 - Recommended: manual run of `./start.sh` with a failing service / failing `post_start` hook to confirm richer diagnostics
 
 ### Docs:
 - README.md: Build instructions now explicitly mention rebuilding the `debeski/decrypter:compose` tag used by the wrapper scripts
 - README.md: Added notes for live compose progress UI and case-insensitive / quoted `DEBUG_STATUS` parsing
-- README.md: Version history updated to v1.0.6 for redraw, diagnostics, and quoted debug parsing changes
+- README.md: Added automatic `DECRYPTER_VERSION` runtime injection note, documented `VERSION` as the source of truth, and version history updated to v1.0.7
 
 ## Part 2: Global
 ### Global Standard Helpers, Shortcuts, Info, etc.:
@@ -77,11 +85,15 @@
 - `run_command(cmd)` - subprocess wrapper with timeout support
 - `run_docker_compose_streaming(args)` - compose runner that streams progress lines while capturing output for failures
 - `collect_service_diagnostics()` - helper for `docker compose ps --all` plus targeted log tailing on failed services
+- `read_decrypter_version()` - reads the bundled `VERSION` file next to `start.py` and falls back to `0.0.0` if unavailable
+- `sync_runtime_compose_override()` - writes a temporary compose override that injects `DECRYPTER_VERSION` into every discovered service
 
 ### Global Ruleset:
 - When adding new compose operations, follow the pattern of `launch_containers()` and `pull_images()`
 - Down mode bypasses all normal startup flow (no secrets, no health checks)
 - If compose config depends on decrypted env vars, allow initial discovery to fail and retry after secrets are loaded
+- If a launcher-owned value should reach all containers, prefer generating a temporary compose override in `start.py` over requiring each project to repeat the same env wiring
+- If the launcher version changes, update `VERSION` and rebuild the `debeski/decrypter:compose` image so `/app/VERSION` matches the runtime code
 
 ### Agent Handoff Rules:
 - Check README.md version history for recent changes
@@ -96,6 +108,8 @@
 - Flag precedence note: `-d/--dev` already implies skip-decrypt behavior, so `-sd/--skip-decrypt` is normalized away when both are provided
 - UI note: dev mode implies skip-decrypt behavior internally, but the render layer should only show the yellow bypass warning for standalone skip-decrypt mode
 - UI note: short mode toggles belong in the shared status bar; longer contextual details such as compose file and target app stay on dedicated lines
+- Runtime metadata note: `DECRYPTER_VERSION` is injected two ways on startup: exported to the Compose process env for interpolation and written into a generated override so containers receive it automatically
+- Version loading note: the deployed runtime reads `/app/VERSION`, so Dockerfile changes must continue copying `VERSION` into the image alongside `start.py`
 
 ### Links To Possibly Helpful Tools and Projects if any:
 - None

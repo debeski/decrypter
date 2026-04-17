@@ -22,8 +22,8 @@ The wrapper scripts in this repo launch the `debeski/decrypter:compose` image ta
 
 ```bash
 # Example custom build
-docker build -t username/decrypter:1.0.6 .
-docker tag username/decrypter:1.0.6 username/decrypter:latest
+docker build -t username/decrypter:$(cat VERSION) .
+docker tag username/decrypter:$(cat VERSION) username/decrypter:latest
 
 # Rebuild the tag used by the bundled wrapper scripts
 docker build -t debeski/decrypter:compose .
@@ -130,11 +130,14 @@ To also remove volumes (equivalent to `docker compose down -v`), add the `-v` fl
 ### Notes
 - `DEBUG_STATUS` parsing is case-insensitive in the launcher. `true`, `True`, `"True"`, and `'false'` are all understood when the compose file is scanned for the debug banner.
 - Compose build and pull activity is streamed into the launcher UI as a live single-line status instead of looking stalled during long image operations.
+- Every launched service automatically receives `DECRYPTER_VERSION` as a runtime environment variable. Decrypter also exports the same variable to Compose itself, so projects can reference it for interpolation without adding a separate host env var.
+- The launcher reads its version from the bundled `VERSION` file in the image, so update that file when cutting a new release.
 
 ***
 
 ## 📜 Version History
 
+- **v1.0.7** - Passed the Decrypter version into Compose and automatically injected `DECRYPTER_VERSION` into all launched services via a generated runtime override, so deployed projects can read the orchestrator version without per-project compose edits.
 - **v1.0.6** - Fixed launcher UI redraw issues that could repeat header lines, kept compose/pull progress on a single in-place status line, improved compose startup diagnostics, and accepted quoted `DEBUG_STATUS` values such as `"True"` when parsing compose config.
 - **v1.0.5** - Streamed Docker Compose build/pull progress during startup, improved failure diagnostics for compose health/post-start errors, and treated running services without healthchecks as ready instead of hanging.
 - **v1.0.4** - Added `--down` flag to stop containers and `-v` flag to remove volumes when stopping.
