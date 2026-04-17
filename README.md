@@ -18,14 +18,15 @@ Simply grab the `start.sh` (or `start.ps1`) file, drop it into the root director
 ## 🛠 Compilation (Global Setup)
 If `start.py` receives an update or an improvement, rebuild the image from this directory to bump the generic target for all your projects.
 
-```bash
-# Basic setup - tagged initial release 
-docker build -t username/decrypter:1.0.0 .
-docker tag username/decrypter:1.0.0 username/decrypter:latest
+The wrapper scripts in this repo launch the `debeski/decrypter:compose` image tag. If you change `start.py`, rebuild that tag or retag your custom build to `:compose`, otherwise target projects will keep running the old bundled `/app/start.py`.
 
-# If modifications to start.py have been done 
-docker build -t username/decrypter:1.0.1 .
-docker tag username/decrypter:1.0.1 username/decrypter:latest
+```bash
+# Example custom build
+docker build -t username/decrypter:1.0.6 .
+docker tag username/decrypter:1.0.6 username/decrypter:latest
+
+# Rebuild the tag used by the bundled wrapper scripts
+docker build -t debeski/decrypter:compose .
 ```
 
 ***
@@ -126,10 +127,16 @@ To also remove volumes (equivalent to `docker compose down -v`), add the `-v` fl
 3. It spins up the `db`, `redis`, and your internal services across the host system's docker network.
 4. It conducts health checks and initiates internal database migrations via `--make-migrations` arguments transparently!
 
+### Notes
+- `DEBUG_STATUS` parsing is case-insensitive in the launcher. `true`, `True`, `"True"`, and `'false'` are all understood when the compose file is scanned for the debug banner.
+- Compose build and pull activity is streamed into the launcher UI as a live single-line status instead of looking stalled during long image operations.
+
 ***
 
 ## 📜 Version History
 
+- **v1.0.6** - Fixed launcher UI redraw issues that could repeat header lines, kept compose/pull progress on a single in-place status line, improved compose startup diagnostics, and accepted quoted `DEBUG_STATUS` values such as `"True"` when parsing compose config.
+- **v1.0.5** - Streamed Docker Compose build/pull progress during startup, improved failure diagnostics for compose health/post-start errors, and treated running services without healthchecks as ready instead of hanging.
 - **v1.0.4** - Added `--down` flag to stop containers and `-v` flag to remove volumes when stopping.
 - **v1.0.3** - Added `-u` / `--update` flag to force pull container images. Support for specific service targeting (e.g., `-u web`).
 - **v1.0.2** - Shifted core target pattern to Docker Compose (`:compose` tag default). Removed container-internal web reachability checks in favor of native health states.
