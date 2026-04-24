@@ -213,6 +213,10 @@ class DockerComposeLauncher:
         parser.add_argument('-u', '--update', nargs='?', const=True, help='Force docker compose pull before starting')
         parser.add_argument('--down', action='store_true', help='Run docker compose down instead of up')
         parser.add_argument('-v', '--volumes', action='store_true', help='Remove volumes when using --down')
+        parser.add_argument('--decrypt', action='store_true', help='Decrypt an encrypted file and print to stdout')
+        parser.add_argument('--encrypt', action='store_true', help='Encrypt a plaintext file (requires -k for public key)')
+        parser.add_argument('-i', '--input', help='Input file path for --encrypt/--decrypt (default: .secrets/.env or secrets.enc)')
+        parser.add_argument('-o', '--output', help='Output file path for --encrypt/--decrypt (default: stdout for decrypt, secrets.enc for encrypt)')
         parser.add_argument('key_positional', nargs='?', help='AGE secret key (positional)')
 
         args = parser.parse_args()
@@ -664,12 +668,31 @@ class DockerComposeLauncher:
         return True, ""
 
 
-    def load_secrets(self, key: str) -> bool:
+    def decrypt_secrets_raw(self, key: str, input_file: str = None, output_file: str = None) -> Tuple[bool, str]:
+        in_path = input_file or self.enc_file
+        cmd = ["sops", "-d", "--input-type", "dotenv", "--output-type", "dotenv"]
+        if output_file:
+            cmd.extend(["--output", output_file])
+        cmd.append(in_path)
+
         os.environ["SOPS_AGE_KEY"] = key
-        ok, out, _ = self.run_command(
-            ["sops", "-d", "--input-type", "dotenv", "--output-type", "dotenv", self.enc_file],
-            timeout=10
-        )
+        ok, out, err = self.run_command(cmd, timeout=10)
+        os.environ.pop("SOPS_AGE_KEY", None)
+        if not ok:
+            return False, err.strip() or "Decryption failed"
+        return True, out
+
+    def encrypt_secrets_raw(self, public_key: str, input_file: str = None, output_file: str = None) -> Tuple[bool, str]:
+        in_path = input_file or ".secrets/.env"
+        out_path = output_file or self.enc_file
+        cmd = ["sops", "-e", "-a", public_key, "--input-type", "dotenv", "--output", out_path, in_path]
+        ok, out, err = self.run_command(cmd, timeout=10)
+        if not ok:
+            return False, err.strip() or "Encryption failed"
+        return True, out
+
+    def load_secrets(self, key: str) -> bool:
+        ok, out = self.decrypt_secrets_raw(key)
         if not ok:
             return False
 
@@ -844,6 +867,39 @@ class DockerComposeLauncher:
             # Try to discover services early so the status row is available,
             # but keep going if compose config still depends on secrets.
             self.discover_services()
+
+            # Handle encrypt-only mode early
+            if args.encrypt:
+                public_key = args.key or args.key_positional or os.environ.get("SOPS_AGE_PUBLIC_KEY") or input("Paste AGE public key: ").strip()
+                if public_key.startswith("AGE-SECRET-KEY-"):
+                    print("✖ Expected a public key (age1...) but got a private key (AGE-SECRET-KEY-...)", file=sys.stderr)
+                    sys.exit(1)
+                in_path = args.input or ".secrets/.env"
+                out_path = args.output or self.enc_file
+                ok, out = self.encrypt_secrets_raw(public_key, input_file=args.input, output_file=args.output)
+                if not ok:
+                    print(f"✖ Encryption failed: {out}", file=sys.stderr)
+                    sys.exit(1)
+                print(f"✅ Encrypted {in_path} → {out_path}")
+                return
+
+            # Handle decrypt-only mode early
+            if args.decrypt:
+                key = args.key or args.key_positional or os.environ.get("SOPS_AGE_KEY") or input("Paste AGE key: ").strip()
+                in_path = args.input or self.enc_file
+                out_path = args.output  # None = stdout
+                ok, out = self.decrypt_secrets_raw(key, input_file=args.input, output_file=args.output)
+                if not ok:
+                    print(f"✖ Decryption failed: {out}", file=sys.stderr)
+                    if "no identity matched" in out:
+                        print("   Hint: verify the private key matches the public key used for encryption.", file=sys.stderr)
+                        print("   Run: age-keygen -y .secrets/.key  (compare output with the recipient in the error above)", file=sys.stderr)
+                    sys.exit(1)
+                if out_path:
+                    print(f"✅ Decrypted {in_path} → {out_path}")
+                else:
+                    print(out)
+                return
 
             # Handle down mode early (no secrets needed, no health checks, etc.)
             if self.down_mode:

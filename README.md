@@ -108,7 +108,48 @@ If you need to ensure your local images are in sync with the remote registry bef
   ./start.sh -u web
   ```
 
-### 🛑 Stopping Environment
+### 🔓 Decrypt
+To decrypt `secrets.enc` and print the plaintext to stdout (without starting any containers), use the `--decrypt` flag:
+
+```bash
+./start.sh --decrypt -k "AGE-SECRET-KEY-..."
+```
+
+To write the output to a file instead of stdout, use `-o`:
+```bash
+./start.sh --decrypt -k "AGE-SECRET-KEY-..." -o .secrets/.env
+```
+
+To decrypt a different input file, use `-i`:
+```bash
+./start.sh --decrypt -k "AGE-SECRET-KEY-..." -i other.enc
+```
+
+You can also use the positional key or `SOPS_AGE_KEY` env var:
+```bash
+export SOPS_AGE_KEY="AGE-SECRET-KEY-..."
+./start.sh --decrypt
+```
+
+### 🔒 Encrypt
+To encrypt `.secrets/.env` into `secrets.enc` (without starting any containers), use the `--encrypt` flag with your **public** key:
+
+```bash
+./start.sh --encrypt -k "age1..."
+```
+
+To specify custom input/output paths, use `-i` and `-o`:
+```bash
+./start.sh --encrypt -k "age1..." -i .secrets/.env.prod -o secrets.prod.enc
+```
+
+You can also use the positional key or `SOPS_AGE_PUBLIC_KEY` env var:
+```bash
+export SOPS_AGE_PUBLIC_KEY="age1..."
+./start.sh --encrypt
+```
+
+### � Stopping Environment
 To stop and remove the running containers, use the `--down` flag:
 
 ```bash
@@ -137,6 +178,7 @@ To also remove volumes (equivalent to `docker compose down -v`), add the `-v` fl
 
 ## 📜 Version History
 
+- **v1.0.10** - Added `--decrypt` and `--encrypt` flags for standalone crypto operations. Added `-i`/`--input` and `-o`/`--output` to customize file paths for encrypt/decrypt.
 - **v1.0.9** - Updated start templates for bash and powershell.
 - **v1.0.8** - Fixed a visual bug where the end result erased previous terminal output.
 - **v1.0.7** - Passed the Decrypter version into Compose and automatically injected `DECRYPTER_VERSION` into all launched services via a generated runtime override, so deployed projects can read the orchestrator version without per-project compose edits.

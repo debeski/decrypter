@@ -10,7 +10,12 @@ if [ "$CMD" = "keygen" ]; then
     if [ ! -z "$2" ]; then
         OUTPUT_FILE="$2"
     fi
-    exec age-keygen -o "$OUTPUT_FILE"
+    # Generate key to file (suppress age-keygen's own stdout to avoid stale/mismatched output)
+    age-keygen -o "$OUTPUT_FILE" >/dev/null
+    # Derive public key FROM the written file so it always matches what's on disk
+    PUBLIC_KEY=$(age-keygen -y "$OUTPUT_FILE")
+    echo "Public key: $PUBLIC_KEY"
+    echo "Key saved to: $OUTPUT_FILE"
 
 elif [ "$CMD" = "encrypt" ]; then
     # Syntax: encrypt <PUBLIC_KEY>
