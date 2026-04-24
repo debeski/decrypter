@@ -6,6 +6,7 @@ __pycache__/
 desktop.ini
 autorun.ini
 .codex
+tracker.md
 
 # Ignore Docker-related files
 Dockerfile
@@ -50,4 +51,5 @@ celerybeat-schedule-wal
 .key
 secrets.enc
 start.sh
-tracker.md
+start.ps1
+test_render.py

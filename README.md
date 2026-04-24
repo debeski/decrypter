@@ -137,6 +137,7 @@ To also remove volumes (equivalent to `docker compose down -v`), add the `-v` fl
 
 ## 📜 Version History
 
+- **v1.0.9** - Updated start templates for bash and powershell.
 - **v1.0.8** - Fixed a visual bug where the end result erased previous terminal output.
 - **v1.0.7** - Passed the Decrypter version into Compose and automatically injected `DECRYPTER_VERSION` into all launched services via a generated runtime override, so deployed projects can read the orchestrator version without per-project compose edits.
 - **v1.0.6** - Fixed launcher UI redraw issues that could repeat header lines, kept compose/pull progress on a single in-place status line, improved compose startup diagnostics, and accepted quoted `DEBUG_STATUS` values such as `"True"` when parsing compose config.
