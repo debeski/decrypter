@@ -217,6 +217,7 @@ class DockerComposeLauncher:
         parser.add_argument('--encrypt', action='store_true', help='Encrypt a plaintext file (requires -k for public key)')
         parser.add_argument('-i', '--input', help='Input file path for --encrypt/--decrypt (default: .secrets/.env or secrets.enc)')
         parser.add_argument('-o', '--output', help='Output file path for --encrypt/--decrypt (default: stdout for decrypt, secrets.enc for encrypt)')
+        parser.add_argument('--version', action='store_true', help='Print decrypter version and exit')
         parser.add_argument('key_positional', nargs='?', help='AGE secret key (positional)')
 
         args = parser.parse_args()
@@ -848,6 +849,10 @@ class DockerComposeLauncher:
     def run(self):
         try:
             args = self.parse_args()
+
+            if args.version:
+                print(f"decrypter {self.decrypter_version}")
+                return
             self.no_migrate = args.no_migrate
             self.force_makemigrations = args.make_migrations
             self.dev_mode = args.dev
