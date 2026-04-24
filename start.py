@@ -93,7 +93,8 @@ class DockerComposeLauncher:
         self.pull_service = None
         self.down_mode = False
         self.down_volumes = False
-        self.last_progress_message = ""
+        self.last_progress_text = ""
+        self.last_progress_label = ""
         self.last_runtime_diagnostic = ""
         self.last_render_line_count = 0
         self.compose_runtime_override: Optional[Path] = None
@@ -169,9 +170,15 @@ class DockerComposeLauncher:
         )
 
         if error_message:
+            lines.append("")
             lines.append("\033[91m✖ ERROR:\033[0m")
             for line in str(error_message).splitlines():
                 lines.append(f"  {line}")
+        else:
+            if self.last_progress_text:
+                lines.append(f"   [{self.last_progress_label}] {self.last_progress_text}")
+            else:
+                lines.append("")
 
         total_lines = max(self.last_render_line_count, len(lines))
 
@@ -459,15 +466,17 @@ class DockerComposeLauncher:
 
     def emit_progress(self, label: str, raw_line: str):
         message = self.extract_progress_message(raw_line)
-        if not message or message == self.last_progress_message:
+        if not message or message == self.last_progress_text:
             return
-        self.last_progress_message = message
+        self.last_progress_text = message
+        self.last_progress_label = label
         print(f"\r\033[2K   [{label}] {message}", end="", flush=True)
 
     def emit_status(self, label: str, message: str):
-        if message == self.last_progress_message:
+        if message == self.last_progress_text:
             return
-        self.last_progress_message = message
+        self.last_progress_text = message
+        self.last_progress_label = label
         print(f"\r\033[2K   [{label}] {message}", end="", flush=True)
 
     def get_compose_ps_entries(self, include_all: bool = False) -> Tuple[bool, List[Dict[str, str]], str]:
@@ -774,7 +783,8 @@ class DockerComposeLauncher:
         return True
 
     def launch_containers(self) -> Tuple[bool, str, str]:
-        self.last_progress_message = ""
+        self.last_progress_text = ""
+        self.last_progress_label = ""
         return self.run_docker_compose_streaming(
             ["up", "-d"],
             progress_callback=lambda line: self.emit_progress("Compose", line),
@@ -791,7 +801,8 @@ class DockerComposeLauncher:
         pull_args = ["pull"]
         if isinstance(self.pull_service, str):
             pull_args.append(self.pull_service)
-        self.last_progress_message = ""
+        self.last_progress_text = ""
+        self.last_progress_label = ""
         return self.run_docker_compose_streaming(
             pull_args,
             progress_callback=lambda line: self.emit_progress("Pull", line),
@@ -810,10 +821,18 @@ class DockerComposeLauncher:
             if snapshot != last_snapshot:
                 deadline = time.time() + timeout
                 last_snapshot = snapshot
+                self.render()
 
-            print("\r   " + " ".join(self.service_icon(s) for s in self.services), end="", flush=True)
+            failed = [s for s in self.services if self.service_state.get(s) == SERVICE_FAILED]
+            starting = [s for s in self.services if self.service_state.get(s) == SERVICE_STARTING]
+            
+            if failed:
+                self.emit_status("Health", f"Failing: {', '.join(failed)}")
+            elif starting:
+                self.emit_status("Health", f"Waiting: {', '.join(starting)}")
 
-            if all(self.service_state[s] == SERVICE_HEALTHY for s in self.services):
+            if all(self.service_state.get(s) == SERVICE_HEALTHY for s in self.services):
+                self.emit_status("Health", "All services healthy")
                 return True, ""
 
             time.sleep(0.5)
@@ -838,7 +857,7 @@ class DockerComposeLauncher:
         self.remove_runtime_compose_override()
 
     def handle_interrupt(self):
-        if self.last_render_line_count or self.last_progress_message:
+        if self.last_render_line_count or self.last_progress_text:
             print("\r\033[2K", end="")
         print("\nInterrupted by user. Exiting cleanly.", flush=True)
 

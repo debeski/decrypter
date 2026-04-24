@@ -57,6 +57,8 @@
   - [x] Make early service discovery non-fatal when compose config still depends on decrypted secrets
   - [x] Pass the current Decrypter version into Compose and every launched service without requiring deployed projects to add a new env entry
   - [x] Load the injected Decrypter version from `VERSION` so the image and runtime env share one source of truth
+  - [x] Move streaming progress messages to a dedicated line below the state circles to prevent overwriting
+  - [x] Add dynamic waiting/failing status output during the `monitor_health` loop so stuck containers are clearly identified
   - [ ] Manually verify startup against a compose project with a service `build:` step
   - [ ] Manually verify a launched container can read `DECRYPTER_VERSION`
   - [ ] Manually verify failure output for a container that exits with code 1 and for a failing `post_start` command

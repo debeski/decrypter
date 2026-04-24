@@ -170,22 +170,7 @@ To also remove volumes (equivalent to `docker compose down -v`), add the `-v` fl
 
 ### Notes
 - `DEBUG_STATUS` parsing is case-insensitive in the launcher. `true`, `True`, `"True"`, and `'false'` are all understood when the compose file is scanned for the debug banner.
-- Compose build and pull activity is streamed into the launcher UI as a live single-line status instead of looking stalled during long image operations.
+- Compose build/pull activity and detailed health check states are streamed into the launcher UI as a live single-line status instead of looking stalled during long image operations or waiting periods.
 - Every launched service automatically receives `DECRYPTER_VERSION` as a runtime environment variable. Decrypter also exports the same variable to Compose itself, so projects can reference it for interpolation without adding a separate host env var.
 - The launcher reads its version from the bundled `VERSION` file in the image, so update that file when cutting a new release.
 
-***
-
-## 📜 Version History
-
-- **v1.0.10** - Added `--decrypt` and `--encrypt` flags for standalone crypto operations. Added `-i`/`--input` and `-o`/`--output` to customize file paths for encrypt/decrypt.
-- **v1.0.9** - Updated start templates for bash and powershell.
-- **v1.0.8** - Fixed a visual bug where the end result erased previous terminal output.
-- **v1.0.7** - Passed the Decrypter version into Compose and automatically injected `DECRYPTER_VERSION` into all launched services via a generated runtime override, so deployed projects can read the orchestrator version without per-project compose edits.
-- **v1.0.6** - Fixed launcher UI redraw issues that could repeat header lines, kept compose/pull progress on a single in-place status line, improved compose startup diagnostics, and accepted quoted `DEBUG_STATUS` values such as `"True"` when parsing compose config.
-- **v1.0.5** - Streamed Docker Compose build/pull progress during startup, improved failure diagnostics for compose health/post-start errors, and treated running services without healthchecks as ready instead of hanging.
-- **v1.0.4** - Added `--down` flag to stop containers and `-v` flag to remove volumes when stopping.
-- **v1.0.3** - Added `-u` / `--update` flag to force pull container images. Support for specific service targeting (e.g., `-u web`).
-- **v1.0.2** - Shifted core target pattern to Docker Compose (`:compose` tag default). Removed container-internal web reachability checks in favor of native health states.
-- **v1.0.1** - Added MIT License, detailed project `.gitignore`, and clarified multi-platform Windows (`.ps1`) usage.
-- **v1.0.0** - Initial release: Core orchestration for SOPS age encryption and Docker deployment setups.
