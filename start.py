@@ -459,6 +459,12 @@ class DockerComposeLauncher:
         self.last_progress_message = message
         print(f"\r\033[2K   [{label}] {message}", end="", flush=True)
 
+    def emit_status(self, label: str, message: str):
+        if message == self.last_progress_message:
+            return
+        self.last_progress_message = message
+        print(f"\r\033[2K   [{label}] {message}", end="", flush=True)
+
     def get_compose_ps_entries(self, include_all: bool = False) -> Tuple[bool, List[Dict[str, str]], str]:
         args = ["ps"]
         if include_all:
@@ -627,7 +633,7 @@ class DockerComposeLauncher:
 
     def run_post_start_hooks(self) -> Tuple[bool, str]:
         if self.no_migrate:
-            print("\n   [Skip] Post-start tasks (Bypass requested)")
+            self.emit_status("Skip", "Post-start tasks (Bypass requested)")
             return True, ""
 
         commands = self.parse_post_start_commands()
@@ -635,7 +641,7 @@ class DockerComposeLauncher:
         for service, cmd in commands:
             # Only run if service is running
             if self.service_state.get(service) != SERVICE_HEALTHY:
-                print(f"\nSkipping post_start for unhealthy service: {service}")
+                self.emit_status("Skip", f"unhealthy service: {service}")
                 continue
 
             # Dynamic argument injection for migrator
@@ -645,7 +651,7 @@ class DockerComposeLauncher:
                  if self.force_makemigrations:
                       cmd += " -mm"
 
-            print(f"\n   [Exec] {service}: {cmd}")
+            self.emit_status("Exec", f"{service}: {cmd}")
             try:
                 exec_args = ["exec", service] + shlex.split(cmd, posix=sys.platform != "win32")
             except ValueError as e:
@@ -677,7 +683,6 @@ class DockerComposeLauncher:
     def load_secrets_from_file(self) -> bool:
         env_path = Path(".secrets/.env")
         if not env_path.exists():
-            print(f"Error: {env_path} not found.")
             return False
             
         try:
@@ -692,7 +697,6 @@ class DockerComposeLauncher:
                 self.loaded_secrets.append(k)
             return True
         except Exception as e:
-            print(f"Error reading secrets file: {e}")
             return False
 
     def discover_services(self) -> bool:
@@ -930,8 +934,7 @@ class DockerComposeLauncher:
                 # We don't exit here, as the app might still be running, but we mark error
             else:
                 self.sections["post_start"] = OK
-            
-            self.render()
+                self.render()
 
             print("\n🎉 Environment ready")
 
