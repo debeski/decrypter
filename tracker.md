@@ -3,6 +3,7 @@
 ## Part 1: Project
 ### Current Verified Snapshot and current project overview:
 - Decrypter is a Docker-based orchestrator for managing SOPS-encrypted secrets and Docker Compose deployments
+- Supports AGE key-based and passphrase-based encryption/decryption via `-p/--passphrase` flag
 - Wrapper scripts (`start.sh`, `start.ps1`) call a Docker container that runs `start.py`
 - Wrapper scripts run the image-tagged `/app/start.py`; editing the repo file does nothing in target projects until the Docker image is rebuilt/tagged and that tag is what the wrapper launches
 - `entrypoint.sh` routes commands: special commands (keygen, encrypt, decrypt, sops) or passes through to Python orchestrator
@@ -43,6 +44,18 @@
 
 ### Tasks:
 - Priority 1:
+  - [x] Add `-p/--passphrase` argument to `parse_args()` for passphrase-based encryption/decryption
+  - [x] Update `encrypt_secrets_raw()` and `decrypt_secrets_raw()` to support passphrase mode via `SOPS_AGE_PASSPHRASE`
+  - [x] Update encrypt/decrypt mode handlers in `run()` to use passphrase when provided
+  - [x] Update normal startup flow to support passphrase for secret decryption
+  - [x] Update `entrypoint.sh` encrypt/decrypt shortcuts to support `--passphrase`/`-p` flag
+  - [x] Verify Python syntax with `python -m compileall start.py`
+  - [x] Update README.md with passphrase usage examples
+  - [x] Update CHANGELOG.md with v1.0.12 entry for passphrase support
+  - [x] Update `start.ps1` to match `start.sh` --update behavior (remove auto-pull, add explicit update flag)
+  - [x] Bump VERSION to 1.0.13
+  - [x] Update CHANGELOG.md with v1.0.13 entry for wrapper script --update flag
+  - [x] Update README.md with wrapper script --update documentation
   - [x] Clarify README.md command surface so bare `encrypt`/`decrypt` are documented as entrypoint shortcuts and `--encrypt`/`--decrypt` are documented as orchestrator flags
   - [x] Add README.md CLI reference for the currently verified `start.py --help` arguments
   - [x] Stream `docker compose up -d` and `docker compose pull` progress so build-heavy services do not look stuck
@@ -95,6 +108,8 @@
 - `collect_service_diagnostics()` - helper for `docker compose ps --all` plus targeted log tailing on failed services
 - `read_decrypter_version()` - reads the bundled `VERSION` file next to `start.py` and falls back to `0.0.0` if unavailable
 - `sync_runtime_compose_override()` - writes a temporary compose override that injects `DECRYPTER_VERSION` into every discovered service
+- `encrypt_secrets_raw(public_key=..., passphrase=...)` - encrypt using AGE public key OR passphrase (sops `--passphrase` mode)
+- `decrypt_secrets_raw(key=..., passphrase=...)` - decrypt using AGE private key OR passphrase (sops `--passphrase` mode)
 
 ### Global Ruleset:
 - When adding new compose operations, follow the pattern of `launch_containers()` and `pull_images()`

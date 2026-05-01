@@ -14,6 +14,22 @@ To use this orchestrator in another project, **you do not need to clone this ent
 
 Simply grab the `start.sh` (or `start.ps1`) file, drop it into the root directory of your target project, and you're good to go! The script acts as a portable, standalone entrypoint that automatically pulls and interacts with the pre-built Docker environment.
 
+### Updating the Decrypter Image
+
+To update the Decrypter Docker image to the latest version, use the `--update` flag on the wrapper script:
+
+**Linux/macOS:**
+```bash
+./start.sh --update
+```
+
+**Windows PowerShell:**
+```powershell
+./start.ps1 --update
+```
+
+This will show your current version, pull the latest image, and display the newly installed version.
+
 ### Command Surface
 Decrypter has two command layers:
 
@@ -80,7 +96,32 @@ If you ever want to update an existing `secrets.enc` file back into `.secrets/.e
 ```
 
 > [!TIP]
-> Need advanced SOPS interactions? You can run any raw SOPS command via the wrapper: `./start.sh sops -d secrets.enc` 
+> Need advanced SOPS interactions? You can run any raw SOPS command via the wrapper: `./start.sh sops -d secrets.enc`
+
+### 4. Passphrase-based Encryption (No Keys Required)
+
+If you prefer not to manage AGE keys, you can encrypt and decrypt using a passphrase instead. This uses SOPS's built-in passphrase mode.
+
+**Encrypt with a passphrase:**
+```bash
+./start.sh encrypt --passphrase "my secret phrase"
+```
+
+**Decrypt with a passphrase:**
+```bash
+./start.sh decrypt --passphrase "my secret phrase"
+```
+
+If you omit the passphrase, you'll be prompted to enter it securely:
+```bash
+./start.sh encrypt --passphrase
+# Enter passphrase: (hidden input)
+```
+
+The orchestrator also supports passphrase mode for deployments:
+```bash
+./start.sh -p "my secret phrase"
+``` 
 
 ***
 
@@ -107,6 +148,7 @@ export SOPS_AGE_KEY="AGE-SECRET-KEY-..."
 | --- | --- |
 | `-h`, `--help` | Show CLI help and exit. |
 | `-k`, `--key` | AGE private key for decrypt/deploy, or AGE public key for `--encrypt`. |
+| `-p`, `--passphrase` | Use a passphrase instead of AGE keys for encryption/decryption. |
 | positional key | Optional AGE key alternative to `-k`. |
 | `-f`, `--file` | Use an alternate Compose file instead of `compose.yml`. |
 | `-d`, `--dev` | Development mode: use `compose.yml` plus `compose.dev.yml`, read `.secrets/.env` directly, and skip decryption. |
@@ -160,6 +202,11 @@ export SOPS_AGE_KEY="AGE-SECRET-KEY-..."
 ./start.sh --decrypt
 ```
 
+**Using a passphrase instead of a key:**
+```bash
+./start.sh --decrypt -p "my passphrase"
+```
+
 ### 🔒 Encrypt
 To encrypt `.secrets/.env` into `secrets.enc` (without starting any containers), use the `--encrypt` flag with your **public** key:
 
@@ -176,6 +223,11 @@ You can also use the positional key or `SOPS_AGE_PUBLIC_KEY` env var:
 ```bash
 export SOPS_AGE_PUBLIC_KEY="age1..."
 ./start.sh --encrypt
+```
+
+**Using a passphrase instead of a key:**
+```bash
+./start.sh --encrypt -p "my passphrase"
 ```
 
 ### Stopping Environment

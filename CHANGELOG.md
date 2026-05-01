@@ -1,5 +1,9 @@
 # Changelog
 
+- **v1.0.13** - Added `--update` flag to wrapper scripts (`start.sh`, `start.ps1`) to explicitly update the Decrypter Docker image. Removed automatic image pull on every run.
+
+- **v1.0.12** - Added `-p`/`--passphrase` flag for passphrase-based encryption/decryption as an alternative to AGE keys. Works with `encrypt`/`decrypt` entrypoint shortcuts and `--encrypt`/`--decrypt` orchestrator modes.
+
 - **v1.0.11** - Separated progress messages from state circles to prevent terminal output overwrites, and added dynamic waiting/failing status output during the health check loop to clearly identify stuck containers.
 
 - **v1.0.10** - Added `--decrypt` and `--encrypt` flags for standalone crypto operations. Added `-i`/`--input` and `-o`/`--output` to customize file paths for encrypt/decrypt.

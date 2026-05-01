@@ -214,6 +214,7 @@ class DockerComposeLauncher:
         """Parse command line arguments"""
         parser = argparse.ArgumentParser(description="Launch Docker environment with secrets")
         parser.add_argument('-k', '--key', help='AGE secret key')
+        parser.add_argument('-p', '--passphrase', help='Passphrase for encryption/decryption (instead of AGE key)')
         parser.add_argument('-f', '--file', help='Specify an alternate compose file')
         parser.add_argument('-d', '--dev', action='store_true', help='Development mode: uses compose.dev.yml override and reads .secrets/.env directly (no decryption)')
         parser.add_argument('-nm', '--no-migrate', action='store_true', help='Bypass post-start migration tasks')
@@ -688,25 +689,38 @@ class DockerComposeLauncher:
         return True, ""
 
 
-    def decrypt_secrets_raw(self, key: str, input_file: str = None, output_file: str = None) -> Tuple[bool, str]:
+    def decrypt_secrets_raw(self, key: str = None, passphrase: str = None, input_file: str = None, output_file: str = None) -> Tuple[bool, str]:
         in_path = input_file or self.enc_file
         cmd = ["sops", "-d", "--input-type", "dotenv", "--output-type", "dotenv"]
         if output_file:
             cmd.extend(["--output", output_file])
         cmd.append(in_path)
 
-        os.environ["SOPS_AGE_KEY"] = key
+        if passphrase:
+            os.environ["SOPS_AGE_PASSPHRASE"] = passphrase
+        elif key:
+            os.environ["SOPS_AGE_KEY"] = key
         ok, out, err = self.run_command(cmd, timeout=10)
         os.environ.pop("SOPS_AGE_KEY", None)
+        os.environ.pop("SOPS_AGE_PASSPHRASE", None)
         if not ok:
             return False, err.strip() or "Decryption failed"
         return True, out
 
-    def encrypt_secrets_raw(self, public_key: str, input_file: str = None, output_file: str = None) -> Tuple[bool, str]:
+    def encrypt_secrets_raw(self, public_key: str = None, passphrase: str = None, input_file: str = None, output_file: str = None) -> Tuple[bool, str]:
         in_path = input_file or ".secrets/.env"
         out_path = output_file or self.enc_file
-        cmd = ["sops", "-e", "-a", public_key, "--input-type", "dotenv", "--output", out_path, in_path]
+
+        if passphrase:
+            cmd = ["sops", "-e", "--passphrase", "--input-type", "dotenv", "--output", out_path, in_path]
+            os.environ["SOPS_AGE_PASSPHRASE"] = passphrase
+        elif public_key:
+            cmd = ["sops", "-e", "-a", public_key, "--input-type", "dotenv", "--output", out_path, in_path]
+        else:
+            return False, "Either public_key or passphrase required for encryption"
+
         ok, out, err = self.run_command(cmd, timeout=10)
+        os.environ.pop("SOPS_AGE_PASSPHRASE", None)
         if not ok:
             return False, err.strip() or "Encryption failed"
         return True, out
@@ -920,13 +934,16 @@ class DockerComposeLauncher:
 
             # Handle encrypt-only mode early
             if args.encrypt:
-                public_key = args.key or args.key_positional or os.environ.get("SOPS_AGE_PUBLIC_KEY") or input("Paste AGE public key: ").strip()
-                if public_key.startswith("AGE-SECRET-KEY-"):
-                    print("✖ Expected a public key (age1...) but got a private key (AGE-SECRET-KEY-...)", file=sys.stderr)
-                    sys.exit(1)
+                passphrase = args.passphrase
+                public_key = None
+                if not passphrase:
+                    public_key = args.key or args.key_positional or os.environ.get("SOPS_AGE_PUBLIC_KEY") or input("Paste AGE public key: ").strip()
+                    if public_key.startswith("AGE-SECRET-KEY-"):
+                        print("✖ Expected a public key (age1...) but got a private key (AGE-SECRET-KEY-...)", file=sys.stderr)
+                        sys.exit(1)
                 in_path = args.input or ".secrets/.env"
                 out_path = args.output or self.enc_file
-                ok, out = self.encrypt_secrets_raw(public_key, input_file=args.input, output_file=args.output)
+                ok, out = self.encrypt_secrets_raw(public_key=public_key, passphrase=passphrase, input_file=args.input, output_file=args.output)
                 if not ok:
                     print(f"✖ Encryption failed: {out}", file=sys.stderr)
                     sys.exit(1)
@@ -935,10 +952,13 @@ class DockerComposeLauncher:
 
             # Handle decrypt-only mode early
             if args.decrypt:
-                key = args.key or args.key_positional or os.environ.get("SOPS_AGE_KEY") or input("Paste AGE key: ").strip()
+                passphrase = args.passphrase
+                key = None
+                if not passphrase:
+                    key = args.key or args.key_positional or os.environ.get("SOPS_AGE_KEY") or input("Paste AGE key: ").strip()
                 in_path = args.input or self.enc_file
                 out_path = args.output  # None = stdout
-                ok, out = self.decrypt_secrets_raw(key, input_file=args.input, output_file=args.output)
+                ok, out = self.decrypt_secrets_raw(key=key, passphrase=passphrase, input_file=args.input, output_file=args.output)
                 if not ok:
                     print(f"✖ Decryption failed: {out}", file=sys.stderr)
                     if "no identity matched" in out:
@@ -972,19 +992,33 @@ class DockerComposeLauncher:
             self.sections["secrets"] = RUNNING
             self.render()
             
-            # Priority: --key flag > positional argument > ENV > Input
+            # Priority: --passphrase > --key flag > positional argument > ENV > Input
             if self.skip_decrypt:
                 if not self.load_secrets_from_file():
                     self.sections["secrets"] = ERROR
                     self.render("Failed to load secrets from file")
                     sys.exit(1)
             else:
-                key = args.key or args.key_positional or os.environ.get("SOPS_AGE_KEY") or input("Paste AGE key: ").strip()
-                
-                if not self.load_secrets(key):
+                passphrase = args.passphrase
+                key = None
+                if not passphrase:
+                    key = args.key or args.key_positional or os.environ.get("SOPS_AGE_KEY") or input("Paste AGE key: ").strip()
+
+                if passphrase:
+                    ok, out = self.decrypt_secrets_raw(passphrase=passphrase)
+                else:
+                    ok, out = self.decrypt_secrets_raw(key=key)
+
+                if not ok:
                     self.sections["secrets"] = ERROR
                     self.render("Failed to decrypt secrets")
                     sys.exit(1)
+
+                for line in out.splitlines():
+                    if "=" in line:
+                        k, v = line.split("=", 1)
+                        os.environ[k] = v.strip("'\"")
+                        self.loaded_secrets.append(k)
             self.sections["secrets"] = OK
 
             # Pull (Optional)
